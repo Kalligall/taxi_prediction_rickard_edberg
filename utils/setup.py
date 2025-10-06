@@ -9,7 +9,7 @@ MODELS_DIR = DATA_DIR / "models"
 
 RAW_FILE = RAW_DIR / "taxi_trip_pricing.csv"
 CLEAN_FILE = PROCESSED_DIR / "taxi_clean.csv"
-FEATURES_FILE = PROCESSED_DIR / "taxi_features.csv"
+FEATURE_FILE = PROCESSED_DIR / "taxi_features.csv"
 MODEL_FILE = MODELS_DIR / "model.joblib"
 SCHEMA_FILE = MODELS_DIR / "schema.json"
 
