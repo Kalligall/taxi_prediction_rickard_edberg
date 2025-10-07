@@ -1,12 +1,13 @@
 import json
 import joblib
+import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import mean_absolute_error, root_mean_squared_error, r2_score
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.ensemble import RandomForestRegressor
 from utils.setup import FEATURE_FILE, MODEL_FILE, SCHEMA_FILE, MODELS_DIR
 
@@ -18,9 +19,22 @@ NUMERIC = [
 ]
 CATEGORIC = ["Time_of_Day", "Day_of_Week", "Traffic_Conditions", "Weather"]
 
+def _onehot():
+    try:
+        return OneHotEncoder(handle_unknown="ignore", sparse_output=False)
+    except TypeError:
+        return OneHotEncoder(handle_unknown="ignore", sparse=False)
+
+try:
+    from sklearn.metrics import root_mean_squared_error as _rmse
+    def RMSE(y_true, y_pred) -> float:
+        return float(_rmse(y_true, y_pred))
+except Exception:
+    def RMSE(y_true, y_pred) -> float:
+        return float(np.sqrt(mean_squared_errror(y_true, y_pred)))
+
 def load_data():
-    df = pd.read_csv(FEATURE_FILE)
-    df = df.dropna(subset=[TARGET])
+    df = pd.read_csv(FEATURE_FILE).dropna(subset=[TARGET])
     X_cols = [c for c in NUMERIC + CATEGORIC if c in df.columns]
     X, y = df[X_cols].copy(), df[TARGET].copy()
     num = [c for c in NUMERIC if c in X.columns]
@@ -49,7 +63,7 @@ def build_pipeline(num_features, cat_features):
 def evaluate(y_true, y_pred):
     return {
         "MAE": float(mean_absolute_error(y_true, y_pred)),
-        "RMSE": float(root_mean_squared_error(y_true, y_pred, squared=False)),
+        "RMSE": RMSE(y_true, y_pred),
         "R2": float(r2_score(y_true, y_pred))
     }
 
