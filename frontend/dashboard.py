@@ -28,8 +28,6 @@ def get_secret_safe(key: str):
         return None
     
 GOOGLE_MAPS_API_KEY = get_secret_safe("GOOGLE_MAPS_API_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY", None)
-
 
 SESSION = requests.Session()
 TIMEOUT = 15
@@ -63,7 +61,7 @@ def gmaps_distance_duration(origin: str, destination: str, api_key: str):
     url = "https://routes.googleapis.com/directions/v2:computeRoutes"
     headers = {
         "Content-Type": "application/json",
-        "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
+        "X-Goog-Api-Key": api_key,
         "X-Goog-FieldMask": "routes.distanceMeters,routes.duration"
     }
     
@@ -76,7 +74,11 @@ def gmaps_distance_duration(origin: str, destination: str, api_key: str):
     }
 
     resp = SESSION.post(url, headers=headers, json=body, timeout=TIMEOUT)
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except:
+        st.error(f"Routes API error {resp.status_code}: {resp.text}")
+        raise
     data = resp.json()
     if not data.get("routes"):
         raise RuntimeError(f"No route found: {data}")
@@ -94,12 +96,11 @@ def _apply_pending_text():
         st.session_state["destination_text"] = st.session_state.pop("pending_destination_text")
 
 def get_places_token() -> str:
-    """One sessions token per user session."""
     if "places_token" not in st.session_state:
         st.session_state["places_token"] = str(uuid.uuid4())
     return st.session_state["places_token"]
 
-def places_autocomplete(query: str, api_key: str, *,
+def places_autocomplete(query: str, api_key: str,
                         language="en", region=None, max_suggestions=5):
     if not query or len(query.strip()) < 3:
         return []
@@ -120,47 +121,31 @@ def places_autocomplete(query: str, api_key: str, *,
     if region:
         body["regionCode"] = region
 
-    resp = requests.post(url, headers=headers, json=body)
-    resp.raise_for_status()
-    data = resp.json()
-    out = []
-    for s in data.get("suggestions", [])[:max_suggestions]:
-        pp = s.get("placePrediction", {})
-        text = (pp.get("text") or {}).get("text")
-        pid = pp.get("placeId")
-        if text:
-            out.append({"text": text, "place_id": pid})
-    return out
-
-
-## add when gemini key is present     
-#def convert_currency(amount: float, from_currency: str, to_currency: str, api_key: str) -> float:
-#    """Converts amount from one currency to another using Gemini Currency API."""
-#    url = "https://api.gemini.com/v1/price"
-#    params = {
-#        "from": from_currency,
-#        "to": to_currency,
-#        "api_key": api_key
-#    }
-#    try:
-#        resp = SESSION.get(url, params=params, timeout=TIMEOUT)
-#       resp.raise_for_status()
-#        rate = float(resp.json().get("rate"))
-#        return amount * rate
-#   except Exception as e:
-#        st.error(f"Failed to convert currency using Gemini API: {e}")
-#        return amount
-
-## remove when gemini key is present
-def convert_currency(amount: float, rate: float | None) -> float:
-    """Manual conversion using provided rate (if any)."""
     try:
-        if rate is None or not math.isfinite(rate) or rate <= 0:
-            return float(amount)
-        return float(amount) * float(rate)
+        resp = requests.post(url, headers=headers, json=body)
+        resp.raise_for_status()
+        data = resp.json()
+        out = []
+        for s in data.get("suggestions", [])[:max_suggestions]:
+            pp = s.get("placePrediction", {})
+            text = (pp.get("text") or {}).get("text")
+            pid = pp.get("placeId")
+            if text:
+                out.append({"text": text, "place_id": pid})
+        return out
+    except requests.HTTPError:
+        st.warning(f"Places API error {resp.status_code}: {resp.text}")
+        return []
+    except Exception as e:
+        st.warning(f"Autocomplete failed: {e}")
+        return []
+
+def convert_currency(amount: float) -> float:
+    
+    try:
+        return float(amount) * 10
     except Exception:
         return float(amount)
-
 
 def build_payload_from_schema(NUM_cols, candidate: dict) -> dict:
     payload = {}
@@ -174,6 +159,9 @@ def build_payload_from_schema(NUM_cols, candidate: dict) -> dict:
             payload[c] = 0.0
     return payload
 
+if not GOOGLE_MAPS_API_KEY:
+    st.warning("No Google Maps API key configured. add API key to .streamlit/secrets.toml or .env")
+
 st.subheader("Enter trip addresses")
 
 _apply_pending_text()
@@ -182,7 +170,7 @@ c1, c2 = st.columns(2)
 
 with c1:
     origin = st.text_input("Origin", key="origin_text", placeholder="e.g., Vasagatan 1, Stockholm")
-    suggestions_o = places_autocomplete(st.session_state.get("origin_text", ""), GOOGLE_MAPS_API_KEY) if GOOGLE_MAPS_API_KEY else []
+    suggestions_o = places_autocomplete(origin, GOOGLE_MAPS_API_KEY) if GOOGLE_MAPS_API_KEY else []
     if suggestions_o:
         st.caption("Suggestions (origin)")
         cols = st.columns(min(2, len(suggestions_o)))
@@ -194,7 +182,7 @@ with c1:
 
 with c2:
     destination = st.text_input("Destination", key="destination_text", placeholder="e.g., Arlanda Airport")
-    suggestions_d = places_autocomplete(st.session_state.get("destination_text", ""), GOOGLE_MAPS_API_KEY) if GOOGLE_MAPS_API_KEY else []
+    suggestions_d = places_autocomplete(destination, GOOGLE_MAPS_API_KEY) if GOOGLE_MAPS_API_KEY else []
     if suggestions_d:
         st.caption("Suggestions (destination)")
         cols = st.columns(min(2, len(suggestions_d)))
@@ -252,7 +240,8 @@ if go:
                 st.json({"payload": payload, "schema_numeric": NUM})
             st.stop()
 
-    st.success(f"Estimated price: **{price:.2f}**")
+    price_sek = convert_currency(price)
+    st.success(f"Estimated price: **{price_sek} SEK**")
     st.caption(f"Distance: {dist_km:.2f} km * Duration: {dur_min:.1f} min")
 
 
@@ -264,12 +253,3 @@ with st.expander("Health / schema"):
     except Exception as e:
         st.error(f"Health not available: {e}")
     st.write("Schema:", schema)
-
-
-if GEMINI_API_KEY:
-    st.markdown("---")
-    st.caption("Optional gemini explanation is available (API key detected).")
-    if st.button ("Explain this prediction (Gemini)"):
-        st.info("Hook ready - implement when we add gemini")
-else:
-    pass

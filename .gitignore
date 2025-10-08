@@ -224,4 +224,8 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
+# reports/predictions
+predictions_*.csv
+split_indices.json
+
 # End of https://www.toptal.com/developers/gitignore/api/python,fastapi,streamlit,jupyter,visualstudiocode,windows

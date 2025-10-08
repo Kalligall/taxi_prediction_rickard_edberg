@@ -85,5 +85,7 @@ if __name__ == "__main__":
     with open(SCHEMA_FILE, "w", encoding="utf-8") as f:
         json.dump(schema, f, indent=2)
 
+
     print(f"saved model to {MODEL_FILE}")
     print(f"saved schema to {SCHEMA_FILE}")
+
