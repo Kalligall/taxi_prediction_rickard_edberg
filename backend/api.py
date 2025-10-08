@@ -46,50 +46,65 @@ def health():
 def get_schema():
     if not SCHEMA:
         raise HTTPException(status_code=500, detail="Schema not loaded.")
-    return SCHEMA
+    return {"numeric": SCHEMA.get("numeric", []),
+        "categorical": SCHEMA.get("categorical", []),
+        "target": SCHEMA.get("target"),
+        "unit_currency": SCHEMA.get("unit_currency", "EUR"),
+        "defaults": SCHEMA.get("defaults", {}),
+        "stats": SCHEMA.get("stats", {}),
+    }
 
 def _validate_and_frame(payload: Dict[str, Any]) -> pd.DataFrame:
     if not SCHEMA:
         raise HTTPException("Schema not loaded.")
-    required = list(SCHEMA.get("numeric", [])) + list(SCHEMA.get("categoric", []))
-    missing = [c for c in required if c not in payload]
-    if missing:
-        raise HTTPException(status_code=400, detail={"error": "Missing features", "missing": missing})
+    numeric = list(SCHEMA.get("numeric", [])) 
+    categoric = list(SCHEMA.get("categoric", []))
+    defaults = SCHEMA.get("defaults", {}) or {}
     
-    row: Dict[str, Any] = {c: payload.get(c) for c in required}
+    row: Dict[str, Any] = {}
 
-    for c in SCHEMA.get("numeric", []):
+    for c in numeric + categoric:
+        if c in payload and payload[c] is not None:
+            row[c] = payload[c]
+        elif c in defaults:
+            row[c] = defaults[c]
+        else:
+            # om vi inte har default, lämna som missing (fel om numeric)
+            row[c] = None
+
+    # kasta numeriska
+    for c in numeric:
         v = row.get(c)
-        if v is not None:
-            try:
-                row[c] = float(v)
-            except Exception:
-                raise HTTPException(status_code=400, detail =f"column '{c}' has to be numerical, got: {v!r}")
-            for c in SCHEMA.get("categoric", []):
-                v = row.get(c)
-                if v is not None and not isinstance(v, str):
-                    row[c] = str(v)
-    
+        if v is None:
+            raise HTTPException(status_code=400, detail=f"Missing required numeric feature: {c}")
+        try:
+            row[c] = float(v)
+        except Exception:
+            raise HTTPException(status_code=400, detail=f"Feature '{c}' must be numeric, got {v!r}")
+
+    # kasta kategoriska
+    for c in categoric:
+        v = row.get(c)
+        if v is None:
+            # försök fallback igen
+            v = defaults.get(c, "")
+        if v is not None and not isinstance(v, str):
+            v = str(v)
+        row[c] = v
+
     return pd.DataFrame([row])
+
 
 @app.post("/predict")
 def predict(payload: Dict[str, Any]):
-    """
-    Send a JSON with the exact features that are located within /schema.
-    Exempel:
-    {
-      "Trip_Distance_km": 8, "Trip_Duration_Minutes": 15, "Passenger_Count": 1,
-      "Base_Fare": 40, "Per_Km_Rate": 12, "Per_Minute_Rate": 3,
-      "Time_of_Day": "Evening", "Day_of_Week": "Friday",
-      "Traffic_Conditions": "Moderate", "Weather": "Clear",
-      "Rule_Estimate": 40 + 12*8 + 3*15, "Diff_to_Rule": 0, "Km_per_Min": 8/15
-    }
-    """
+    
     if MODEL is None:
         raise HTTPException(status_code=500, detail="Model not loaded.")
-    df = _validate_and_frame(payload)
     try: 
+        df = _validate_and_frame(payload)
         pred = MODEL.predict(df)[0]
+        return {"predicted_price": float(pred)}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Prediction failed: {e}")
-    return {"predicted_price": float(pred)}

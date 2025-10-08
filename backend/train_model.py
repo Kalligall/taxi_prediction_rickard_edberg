@@ -14,8 +14,8 @@ from utils.setup import FEATURE_FILE, MODEL_FILE, SCHEMA_FILE, MODELS_DIR
 TARGET = "Trip_Price"
 NUMERIC = [
     "Trip_Distance_km", "Trip_Duration_Minutes",
-    "Base_Fare", "Per_Km_Rate", "Per_Minute_Rate",
-    "Rule_Estimate", "Diff_to_Rule", "Km_per_Min"
+    "Passenger_Count", "Base_Fare", "Per_Km_Rate", 
+    "Per_Minute_Rate",
 ]
 ##CATEGORIC = ["Time_of_Day", "Day_of_Week", "Traffic_Conditions", "Weather"]
 CATEGORIC = []
@@ -42,20 +42,21 @@ def load_data():
     cat = [c for c in CATEGORIC if c in X.columns]
     return X, y, num, cat
 
-def build_pipeline(num_features, cat_features):
-    pre = ColumnTransformer(
-        transformers=[
-            ("num", Pipeline([
-                ("imp", SimpleImputer(strategy="median")),
-                ("sc", StandardScaler(with_mean=False))
-            ]), num_features),
-            ("cat", Pipeline([
-                ("imp", SimpleImputer(strategy="most_frequent")),
-                ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False))
-            ]), cat_features),
-        ],
-        remainder="drop"
-    )
+def build_pipeline(num, cat):
+    transformers = []
+    
+    if num:
+        transformers.append(("num", Pipeline([
+            ("imp", SimpleImputer(strategy="median")),
+            ("sc", StandardScaler(with_mean=False))
+        ]), num))
+    if cat:
+        transformers.append(("cat", Pipeline([
+            ("imp", SimpleImputer(strategy="most_frequent")),
+            ("oh", _onehot()),
+        ]), cat))
+    pre = ColumnTransformer(transformers=transformers, remainder="drop")
+    
     model = RandomForestRegressor(
         n_estimators=300, random_state=42, n_jobs=-1
     )
@@ -80,8 +81,33 @@ if __name__ == "__main__":
 
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     joblib.dump(pipe, MODEL_FILE)
+    stats= {}
+    for c in num:
+        s = X[c].astype(float)
+        stats[c] = {
+            "min": float(s.min()),
+            "max": float(s.max()),
+            "p95": float(s.quantile(0.95)),
+        }
 
-    schema = {"numeric": num, "categoric": cat, "target": TARGET}
+    defaults_num = {c: float(pd.to_numeric(X[c], errors="coerce").median()) for c in num}
+    defaults_cat = {}
+    #for c in cat:
+    #    mode = X[c].mode(dropna=True)
+    #    if not mode.empty:
+    #        defaults_cat[c] = str(mode.iloc[0])
+
+    schema = {
+        "feature_set": "all_raw",
+        "model_name": "RandomForestRegressor",
+        "numeric": num,
+        "categorical": cat,
+        "target": TARGET,
+        "unit_currency": "EUR",
+        "defaults": {**defaults_num, **defaults_cat},
+        "stats": stats,
+    }
+
     with open(SCHEMA_FILE, "w", encoding="utf-8") as f:
         json.dump(schema, f, indent=2)
 

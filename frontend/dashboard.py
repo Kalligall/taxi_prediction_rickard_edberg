@@ -2,7 +2,6 @@ import os
 import requests
 import streamlit as st
 import uuid
-import math
 
 st.set_page_config(page_title="Taxi Price Predictor", layout= "centered")
 st.title("Taxi Price Predictor")
@@ -44,7 +43,7 @@ def get_schema():
 try:
     schema = get_schema()
     NUM = list(schema.get("numeric", []))
-    CAT = list(schema.get("categoric", []))
+    CAT = list(schema.get("categorical", []) or schema.get("categoric") or [])
     if not NUM:
         raise RuntimeError("Schema has no numeric features. Retrain the model to refresh")
 except Exception as e:
@@ -122,7 +121,7 @@ def places_autocomplete(query: str, api_key: str,
         body["regionCode"] = region
 
     try:
-        resp = requests.post(url, headers=headers, json=body)
+        resp = SESSION.post(url, headers=headers, json=body, timeout=TIMEOUT)
         resp.raise_for_status()
         data = resp.json()
         out = []
@@ -147,16 +146,17 @@ def convert_currency(amount: float) -> float:
     except Exception:
         return float(amount)
 
-def build_payload_from_schema(NUM_cols, candidate: dict) -> dict:
+def build_payload(num_cols, cat_cols, candidate: dict):
     payload = {}
-    for c in NUM_cols:
-        v = candidate.get(c, 0.0)
-        if v is None:
-            v = 0.0
-        try:
-            payload[c] = 0.0 if v is None else float(v)
-        except Exception:
-            payload[c] = 0.0
+    for c in num_cols:
+        if c in candidate and candidate[c] is not None:
+            try:
+                payload[c] = float(candidate[c])
+            except Exception:
+                pass
+    for c in cat_cols:
+        if c in candidate and candidate[c] not in (None, ""):
+            payload[c] = str(candidate[c])
     return payload
 
 if not GOOGLE_MAPS_API_KEY:
@@ -192,16 +192,11 @@ with c2:
                 st.session_state["pending_destination_text"] = s["text"]
                 st.rerun()
 
-
-    base = ["Base_Fare"]
-    per_km = ["Per_Km_Rate"]
-    per_min = ["Per_Minute_Rate"]
+pax = st.number_input("Passengers", min_value=1, max_value=8, value=1, step=1)
 
 go = st.button("Get price")
 
 if go:
-    origin= st.session_state.get("origin_text", "")
-    destination = st.session_state.get("destination_text", "")
 
     if not origin or not destination:
         st.error("please enter both origin and destination")
@@ -209,8 +204,6 @@ if go:
     if not GOOGLE_MAPS_API_KEY:
         st.error("Google Maps API key missing")
         st.stop()
-    else:
-        st.caption("Maps key loaded")
 
     with st.spinner("Looking up distance & duration..."):
         try:
@@ -219,16 +212,12 @@ if go:
             st.error(f"Maps lookup failed: {e}")
             st.stop()
 
-    km_per_min = (dist_km / dur_min) if dur_min > 0 else 0.0
     candidate = {
         "Trip_Distance_km": dist_km,
         "Trip_Duration_Minutes": dur_min,
-        "Base_Fare": base,
-        "Per_Km_Rate": per_km,
-        "Per_Minute_Rate": per_min,
-        "Km_per_Min": km_per_min,
+        "Passenger_Count": int(pax)
     }
-    payload = build_payload_from_schema(NUM, candidate)
+    payload = build_payload(NUM, CAT, candidate)
 
     with st.spinner("Predicting price..."):
         try:
@@ -241,7 +230,7 @@ if go:
             st.stop()
 
     price_sek = convert_currency(price)
-    st.success(f"Estimated price: **{price_sek} SEK**")
+    st.success(f"Estimated price: **{price_sek:.2f} SEK**")
     st.caption(f"Distance: {dist_km:.2f} km * Duration: {dur_min:.1f} min")
 
 
