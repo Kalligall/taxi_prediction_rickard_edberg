@@ -13,11 +13,12 @@ from utils.setup import FEATURE_FILE, MODEL_FILE, SCHEMA_FILE, MODELS_DIR
 
 TARGET = "Trip_Price"
 NUMERIC = [
-    "Trip_Distance_km", "Trip_Duration_Minutes", "Passenger_Count",
+    "Trip_Distance_km", "Trip_Duration_Minutes",
     "Base_Fare", "Per_Km_Rate", "Per_Minute_Rate",
     "Rule_Estimate", "Diff_to_Rule", "Km_per_Min"
 ]
-CATEGORIC = ["Time_of_Day", "Day_of_Week", "Traffic_Conditions", "Weather"]
+##CATEGORIC = ["Time_of_Day", "Day_of_Week", "Traffic_Conditions", "Weather"]
+CATEGORIC = []
 
 def _onehot():
     try:

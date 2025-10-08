@@ -2,17 +2,11 @@
   "numeric": [
     "Trip_Distance_km",
     "Trip_Duration_Minutes",
-    "Passenger_Count",
     "Base_Fare",
     "Per_Km_Rate",
     "Per_Minute_Rate",
     "Km_per_Min"
   ],
-  "categoric": [
-    "Time_of_Day",
-    "Day_of_Week",
-    "Traffic_Conditions",
-    "Weather"
-  ],
+  "categoric": [],
   "target": "Trip_Price"
 }

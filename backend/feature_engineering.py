@@ -2,9 +2,10 @@ import pandas as pd
 from utils.setup import CLEAN_FILE, FEATURE_FILE, PROCESSED_DIR
 
 TARGET = "Trip_Price"
-NUMERIC = ["Trip_Distance_km", "Trip_Duration_Minutes", "Passenger_Count",
+NUMERIC = ["Trip_Distance_km", "Trip_Duration_Minutes",
            "Base_Fare", "Per_Km_Rate", "Per_Minute_Rate"]
-CATEGORICAL = ["Time_of_Day", "Day_of_Week", "Traffic_Conditions", "Weather"]
+##CATEGORIC = ["Time_of_Day", "Day_of_Week", "Traffic_Conditions", "Weather"]
+CATEGORIC = []
 
 def load_clean() -> pd.DataFrame:
     return pd.read_csv(CLEAN_FILE)

@@ -7,7 +7,8 @@ NUM_COLS = [
     "Trip_Distance_km", "Passenger_Count", "Base_Fare",
     "per_Km_Rate", "Per_Minute_Rate", "Trip_Duration_Minutes", "Trip_price"
 ]
-CAT_COLS = ["Time_of_Day", "Day_of_Week", "Month", "Traffic_Conditions", "Weather"]
+##CAT_COLS = ["Time_of_Day", "Day_of_Week", "Month", "Traffic_Conditions", "Weather"]
+CAT_COLS = []
 
 def load_raw() -> pd.DataFrame:
     df = pd.read_csv(RAW_FILE)
@@ -19,11 +20,11 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
             df[c] = pd.to_numeric(df[c], errors="coerce")
     df = df.drop_duplicates()
 
-    for c in ["Trip_Distance_km", "Trip_Duraction_Minutes", "Passenger_Count", "Trip_Price"]:
+    for c in ["Trip_Distance_km", "Trip_Duraction_Minutes", "Trip_Price"]:
         if c in df.columns:
             df = df[df[c].isna() | (df[c] >= 0)]
 
-    for c in ["Trip_Distance_km", "Trip_Duration_Minutes", "Passenger_Count", 
+    for c in ["Trip_Distance_km", "Trip_Duration_Minutes", 
               "Base_Fare", "Per_Km_Rate", "Per_Minute_Rate"]:
         if c in df.columns:
             df[c] = df[c].fillna(df[c].median())
